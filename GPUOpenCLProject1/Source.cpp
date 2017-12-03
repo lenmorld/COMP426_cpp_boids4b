@@ -35,6 +35,15 @@ const double SPEED_LIMITER = 0.02;			// larger-> faster
 const double SCREEN_COHESION_RADIUS = 2.0;
 const double DESIRED_DISTANCE = 0.01;
 
+/************ opencl global stuff ************/
+
+cl_device_id devices[2];				// put in an array to create a shared context
+cl_int ret;
+
+char *gpu_source_str;
+size_t gpu_source_size;
+
+
 // before: 1280 x 720
 int windowWidth = 1920;     // Windowed mode's width
 int windowHeight = 1080;     // Windowed mode's height
@@ -72,7 +81,6 @@ void computeFunction() {
 
 	// count
 	ARGS[0] = COUNT;
-
 
 	// init X and Y to flocks' birds
 
@@ -114,61 +122,7 @@ void computeFunction() {
 	//int m1;
 	//std::cin >> m1;
 
-	// Load the kernel source code into the array source_str
-	FILE *fp;
-	char *source_str;
-	size_t source_size;
 
-	//fp = fopen("template.cl", "r");
-	fp = fopen("gpu.cl", "r");
-	if (!fp) {
-		fprintf(stderr, "Failed to load kernel.\n");
-		exit(1);
-	}
-	source_str = (char*)malloc(MAX_SOURCE_SIZE);
-	source_size = fread(source_str, 1, MAX_SOURCE_SIZE, fp);
-	fclose(fp);
-	//====================
-
-	// ================================================
-
-	// Get platform and device information
-	cl_platform_id platform_id = NULL;				// Get platform ID, hopefully only one platform that contains both CPU and GPU
-													//cl_platform_id platform_id2 = NULL;
-
-													//cl_device_id device_id_gpu = NULL;
-													////cl_device_id device_id_cpu = NULL;
-
-	cl_device_id devices[2];				// put in an array to create a shared context
-
-	cl_uint ret_num_devices;
-
-	cl_uint ret_num_platforms;
-	cl_uint ret_num_platforms2;
-
-	// ONLY ONE PLATFORM
-	cl_int ret = clGetPlatformIDs(1, &platform_id, &ret_num_platforms);
-
-	//cl_int ret2 = clGetPlatformIDs(1, &platform_id2, &ret_num_platforms2);
-
-	//ret = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_DEFAULT, 1,
-	//	&device_id, &ret_num_devices);
-
-	ret = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1,
-		&devices[0], &ret_num_devices);												// only 1 for HP laptop
-
-	if (CL_SUCCESS == ret)
-		printf("\nDetected GPU device : %d \n", ret_num_devices);
-	else
-		printf("\nError calling clGetDeviceIDs. Error code: %d", ret);
-
-	ret = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_CPU, 1,
-		&devices[1], &ret_num_devices);
-
-	if (CL_SUCCESS == ret)
-		printf("\nDetected CPU device: %d \n", ret_num_devices);
-	else
-		printf("\nError calling clGetDeviceIDs. Error code: %d", ret);
 
 	// ###### Create an OpenCL context
 
@@ -227,7 +181,7 @@ void computeFunction() {
 
 	// #### Create a program from the kernel source
 	cl_program program = clCreateProgramWithSource(context, 1,
-		(const char **)&source_str, (const size_t *)&source_size, &ret);
+		(const char **)&gpu_source_str, (const size_t *)&gpu_source_size, &ret);
 
 	// #### Build the program
 
@@ -279,8 +233,8 @@ void computeFunction() {
 		COUNT * sizeof(float), YR, 0, NULL, NULL);
 
 	// Display the result to the screen
-	for (i = 0; i < COUNT; i++)
-		printf("%f = %d\n", X[i], XR[i]);
+	//for (i = 0; i < COUNT; i++)
+		//printf("%f = %d\n", X[i], XR[i]);
 
 	// iterate through flocks and boids, apply new position
 	// or spawn new threads again just to move
@@ -433,6 +387,68 @@ int main(int argc, char** argv) {
 
 		flocks.push_back(Flock(i, loc, PVector(0.0, 0.0), loc, boids));
 	}
+
+	/**** init openCL stuff ***/
+
+	// ### load Kernel
+	// GPU
+
+	// Load the kernel source code into the array source_str
+	FILE *fp;
+	char *source_str;
+	size_t source_size;
+
+	//fp = fopen("template.cl", "r");
+	fp = fopen("gpu.cl", "r");
+	if (!fp) {
+		fprintf(stderr, "Failed to load kernel.\n");
+		exit(1);
+	}
+	gpu_source_str = (char*)malloc(MAX_SOURCE_SIZE);
+	gpu_source_size = fread(gpu_source_str, 1, MAX_SOURCE_SIZE, fp);
+	fclose(fp);
+	//====================
+
+	// ================================================
+	// Get platform and device information
+	cl_platform_id platform_id = NULL;				// Get platform ID, hopefully only one platform that contains both CPU and GPU
+													//cl_platform_id platform_id2 = NULL;
+
+													//cl_device_id device_id_gpu = NULL;
+													////cl_device_id device_id_cpu = NULL;
+
+													//cl_device_id devices[2];				// put in an array to create a shared context
+	cl_uint ret_num_devices;
+
+	cl_uint ret_num_platforms;
+	cl_uint ret_num_platforms2;
+
+	// ONLY ONE PLATFORM
+	ret = clGetPlatformIDs(1, &platform_id, &ret_num_platforms);
+
+	//cl_int ret2 = clGetPlatformIDs(1, &platform_id2, &ret_num_platforms2);
+
+	//ret = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_DEFAULT, 1,
+	//	&device_id, &ret_num_devices);
+
+	ret = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1,
+		&devices[0], &ret_num_devices);												// only 1 for HP laptop
+
+	if (CL_SUCCESS == ret)
+		printf("\nDetected GPU device : %d \n", ret_num_devices);
+	else
+		printf("\nError calling clGetDeviceIDs. Error code: %d", ret);
+
+	ret = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_CPU, 1,
+		&devices[1], &ret_num_devices);
+
+	if (CL_SUCCESS == ret)
+		printf("\nDetected CPU device: %d \n", ret_num_devices);
+	else
+		printf("\nError calling clGetDeviceIDs. Error code: %d", ret);
+
+
+
 
 	glutMainLoop();
 
