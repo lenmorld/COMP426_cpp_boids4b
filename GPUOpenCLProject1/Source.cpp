@@ -30,10 +30,14 @@
 
 const int BOID_PER_FLOCK = 20;
 const int FLOCKS = 7;
-const int STEP_TO_CENTER_DIVISOR = 1;		// larger -> slower
-const double SPEED_LIMITER = 0.02;			// larger-> faster
-const double SCREEN_COHESION_RADIUS = 2.0;
+const int STEP_TO_CENTER_DIVISOR = 10;		// larger -> slower
+const double SPEED_LIMITER = 0.01;			// larger-> faster
+const double SCREEN_COHESION_RADIUS = 0.5;
 const double DESIRED_DISTANCE = 0.01;
+const float STEP_VELOCITY = 8;					// larger -> slower
+const float NEIGHBOR_RADIUS = 0.00001;				// smaller -> more independent, bigger -> more flocking
+													// extremes 0.00001, 1.0000
+
 
 /************ opencl global stuff ************/
 
@@ -71,19 +75,37 @@ void computeFunction() {
 	int i;
 	//const int LIST_SIZE = 1024;
 	int COUNT = FLOCKS * BOID_PER_FLOCK;
+
+	// ### setup HOST DATA ####
 	
 	float *X = (float*)malloc(sizeof(float)* COUNT);
 	float *Y = (float*)malloc(sizeof(float)* COUNT);
 
-	int NUM_ARGS = 1;			// increase as needed [count]
+	float *X_V = (float*)malloc(sizeof(float)* COUNT);
+	float *Y_V = (float*)malloc(sizeof(float)* COUNT);
 
-	int *ARGS = (int*)malloc(sizeof(int)* NUM_ARGS);
+	//INT_ARGS [COUNT, BOID_PER_FLOCK, FLOCKS, STEP_TO_CENTER_DIVISOR]
 
+	int NUM_INT_ARGS = 4;			
+	int *INT_ARGS = (int*)malloc(sizeof(int)* NUM_INT_ARGS);
 	// count
-	ARGS[0] = COUNT;
+	INT_ARGS[0] = COUNT;
+	INT_ARGS[1] = BOID_PER_FLOCK;
+	INT_ARGS[2] = FLOCKS;
+	INT_ARGS[3] = STEP_TO_CENTER_DIVISOR;
+
+	//FLOAT_ARGS [SCREEN_COHESION_RADIUS, DESIRED_DISTANCE, STEP_VELOCITY, NEIGHBOR_RADIUS]
+
+	int NUM_FLOAT_ARGS = 4;
+	float *FLOAT_ARGS = (float*)malloc(sizeof(float)* NUM_FLOAT_ARGS);
+	// count
+	FLOAT_ARGS[0] = SCREEN_COHESION_RADIUS;
+	FLOAT_ARGS[1] = DESIRED_DISTANCE;
+	FLOAT_ARGS[2] = STEP_VELOCITY;
+	FLOAT_ARGS[3] = NEIGHBOR_RADIUS;
+
 
 	// init X and Y to flocks' birds
-
 	// eg 0->6
 	for (int flock_id = 0; flock_id < FLOCKS; flock_id++) {
 
@@ -106,8 +128,8 @@ void computeFunction() {
 			X[index] = location.x;
 			Y[index] = location.y;
 
-			//h_v_x[index] = velocity.x;
-			//h_v_y[index] = velocity.y;
+			X_V[index] = velocity.x;
+			Y_V[index] = velocity.y;
 
 			//h_vv_x[index] = new_velocity.x;
 			//h_vv_y[index] = new_velocity.y;
@@ -121,8 +143,6 @@ void computeFunction() {
 
 	//int m1;
 	//std::cin >> m1;
-
-
 
 	// ###### Create an OpenCL context
 
@@ -147,19 +167,35 @@ void computeFunction() {
 
 	// ##### setup DEVICE MEMORY #########
 
+	// X and Y
 	cl_mem x_mem_obj = clCreateBuffer(context, CL_MEM_READ_ONLY,
 		COUNT * sizeof(float), NULL, &ret);
 	cl_mem y_mem_obj = clCreateBuffer(context, CL_MEM_READ_ONLY,
 		COUNT * sizeof(float), NULL, &ret);
-	cl_mem xr_mem_obj = clCreateBuffer(context, CL_MEM_WRITE_ONLY,				// result
+	// X,Y velocities
+	cl_mem x_v_mem_obj = clCreateBuffer(context, CL_MEM_READ_ONLY,
+		COUNT * sizeof(float), NULL, &ret);
+	cl_mem y_v_mem_obj = clCreateBuffer(context, CL_MEM_READ_ONLY,
+		COUNT * sizeof(float), NULL, &ret);
+
+	// result objects
+	cl_mem xr_mem_obj = clCreateBuffer(context, CL_MEM_WRITE_ONLY,				
 		COUNT * sizeof(float), NULL, &ret);
 	cl_mem yr_mem_obj = clCreateBuffer(context, CL_MEM_WRITE_ONLY,				
 		COUNT * sizeof(float), NULL, &ret);
 
-	// ARGS like count, cohesion etc, see ARGS var above
-	cl_mem args_mem_obj = clCreateBuffer(context, CL_MEM_READ_ONLY,				// result
-		NUM_ARGS * sizeof(int), NULL, &ret);
+	cl_mem x_v_r_mem_obj = clCreateBuffer(context, CL_MEM_WRITE_ONLY,				
+		COUNT * sizeof(float), NULL, &ret);
+	cl_mem y_v_r_mem_obj = clCreateBuffer(context, CL_MEM_WRITE_ONLY,
+		COUNT * sizeof(float), NULL, &ret);
 
+	// INT_ARGS
+	cl_mem int_args_mem_obj = clCreateBuffer(context, CL_MEM_READ_ONLY,				
+		NUM_INT_ARGS * sizeof(int), NULL, &ret);
+	// FLOAT_ARGS
+	cl_mem float_args_mem_obj = clCreateBuffer(context, CL_MEM_READ_ONLY,
+		NUM_FLOAT_ARGS * sizeof(float), NULL, &ret);
+	
 
 
 	//###### DEVICE TO HOST ##########
@@ -171,13 +207,23 @@ void computeFunction() {
 	//ret = clEnqueueWriteBuffer(command_queue_gpu, b_mem_obj, CL_TRUE, 0,
 	//	LIST_SIZE * sizeof(int), B, 0, NULL, NULL);
 
+	// X,Y
 	ret = clEnqueueWriteBuffer(command_queue_gpu, x_mem_obj, CL_TRUE, 0,			// X array		
 		COUNT * sizeof(float), X, 0, NULL, NULL);
 	ret = clEnqueueWriteBuffer(command_queue_gpu, y_mem_obj, CL_TRUE, 0,			// Y array	
 		COUNT * sizeof(float), Y, 0, NULL, NULL);
 
-	ret = clEnqueueWriteBuffer(command_queue_gpu, args_mem_obj, CL_TRUE, 0,			// ARGS array	
-		NUM_ARGS * sizeof(int), ARGS, 0, NULL, NULL);
+	// X,Y velocities
+	ret = clEnqueueWriteBuffer(command_queue_gpu, x_v_mem_obj, CL_TRUE, 0,				
+		COUNT * sizeof(float), X_V, 0, NULL, NULL);
+	ret = clEnqueueWriteBuffer(command_queue_gpu, y_v_mem_obj, CL_TRUE, 0,				
+		COUNT * sizeof(float), Y_V, 0, NULL, NULL);
+
+	ret = clEnqueueWriteBuffer(command_queue_gpu, int_args_mem_obj, CL_TRUE, 0,			// ARGS array	
+		NUM_INT_ARGS * sizeof(int), INT_ARGS, 0, NULL, NULL);
+
+	ret = clEnqueueWriteBuffer(command_queue_gpu, float_args_mem_obj, CL_TRUE, 0,			// ARGS array	
+		NUM_FLOAT_ARGS * sizeof(float), FLOAT_ARGS, 0, NULL, NULL);
 
 	// #### Create a program from the kernel source
 	cl_program program = clCreateProgramWithSource(context, 1,
@@ -199,10 +245,18 @@ void computeFunction() {
 
 	ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&x_mem_obj);
 	ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&y_mem_obj);
-	ret = clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&xr_mem_obj);
-	ret = clSetKernelArg(kernel, 3, sizeof(cl_mem), (void *)&yr_mem_obj);
 
-	ret = clSetKernelArg(kernel, 4, sizeof(cl_mem), (void *)&args_mem_obj);
+	ret = clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&x_v_mem_obj);
+	ret = clSetKernelArg(kernel, 3, sizeof(cl_mem), (void *)&y_v_mem_obj);
+
+	ret = clSetKernelArg(kernel, 4, sizeof(cl_mem), (void *)&xr_mem_obj);
+	ret = clSetKernelArg(kernel, 5, sizeof(cl_mem), (void *)&yr_mem_obj);
+
+	ret = clSetKernelArg(kernel, 6, sizeof(cl_mem), (void *)&x_v_r_mem_obj);
+	ret = clSetKernelArg(kernel, 7, sizeof(cl_mem), (void *)&y_v_r_mem_obj);
+
+	ret = clSetKernelArg(kernel, 8, sizeof(cl_mem), (void *)&int_args_mem_obj);
+	ret = clSetKernelArg(kernel, 9, sizeof(cl_mem), (void *)&float_args_mem_obj);
 
 	// Execute the OpenCL kernel on the list
 	size_t global_item_size = COUNT;			// Process the entire lists
@@ -221,16 +275,24 @@ void computeFunction() {
 
 	//int *C = (int*)malloc(sizeof(int)*LIST_SIZE);
 
-	float *XR = (float*)malloc(sizeof(float)*COUNT);
-	float *YR = (float*)malloc(sizeof(float)*COUNT);
+	float *X_R = (float*)malloc(sizeof(float)*COUNT);
+	float *Y_R = (float*)malloc(sizeof(float)*COUNT);
+
+	float *X_V_R = (float*)malloc(sizeof(float)*COUNT);
+	float *Y_V_R = (float*)malloc(sizeof(float)*COUNT);
 
 	//ret = clEnqueueReadBuffer(command_queue_gpu, c_mem_obj, CL_TRUE, 0,
 	//	LIST_SIZE * sizeof(int), C, 0, NULL, NULL);
 
 	ret = clEnqueueReadBuffer(command_queue_gpu, xr_mem_obj, CL_TRUE, 0,
-		COUNT * sizeof(float), XR, 0, NULL, NULL);
+		COUNT * sizeof(float), X_R, 0, NULL, NULL);
 	ret = clEnqueueReadBuffer(command_queue_gpu, yr_mem_obj, CL_TRUE, 0,
-		COUNT * sizeof(float), YR, 0, NULL, NULL);
+		COUNT * sizeof(float), Y_R, 0, NULL, NULL);
+
+	ret = clEnqueueReadBuffer(command_queue_gpu, x_v_r_mem_obj, CL_TRUE, 0,
+		COUNT * sizeof(float), X_V_R, 0, NULL, NULL);
+	ret = clEnqueueReadBuffer(command_queue_gpu, y_v_r_mem_obj, CL_TRUE, 0,
+		COUNT * sizeof(float), Y_V_R, 0, NULL, NULL);
 
 	// Display the result to the screen
 	//for (i = 0; i < COUNT; i++)
@@ -255,11 +317,17 @@ void computeFunction() {
 			// no need for orig X and Y here right?
 
 
-			b.location.x = XR[index];
-			b.location.y = YR[index];
+			//b.location.x = X_R[index];
+			//b.location.y = Y_R[index];
 
 			//b.location.x = h_x[index];
 			//b.location.y = h_y[index];
+
+			b.velocity.x = X_V_R[index];
+			b.velocity.y = Y_V_R[index];
+
+			b.location.x += b.velocity.x;
+			b.location.y += b.velocity.y;
 
 			//b.velocity.x = h_v_x[index];
 			//b.velocity.y = h_v_y[index];
@@ -283,10 +351,17 @@ void computeFunction() {
 	ret = clReleaseMemObject(x_mem_obj);
 	ret = clReleaseMemObject(y_mem_obj);
 
+	ret = clReleaseMemObject(x_v_mem_obj);
+	ret = clReleaseMemObject(y_v_mem_obj);
+
 	ret = clReleaseMemObject(xr_mem_obj);
 	ret = clReleaseMemObject(yr_mem_obj);
 
-	ret = clReleaseMemObject(args_mem_obj);
+	ret = clReleaseMemObject(x_v_r_mem_obj);
+	ret = clReleaseMemObject(y_v_r_mem_obj);
+
+	ret = clReleaseMemObject(int_args_mem_obj);
+	ret = clReleaseMemObject(float_args_mem_obj);
 
 	ret = clReleaseCommandQueue(command_queue_gpu);
 	ret = clReleaseCommandQueue(command_queue_cpu);
@@ -297,10 +372,17 @@ void computeFunction() {
 	free(X);
 	free(Y);
 
-	free(XR);
-	free(YR);
+	free(X_V);
+	free(Y_V);
 
-	free(ARGS);
+	free(X_R);
+	free(Y_R);
+
+	free(X_V_R);
+	free(Y_V_R);
+
+	free(INT_ARGS);
+	free(FLOAT_ARGS);
 
 	glutPostRedisplay();      // Post re-paint request to activate display()
 }

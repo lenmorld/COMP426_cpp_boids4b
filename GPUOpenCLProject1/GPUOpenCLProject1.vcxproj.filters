@@ -84,5 +84,6 @@
     <None Include="orig.cpp.bak">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="README.md" />
   </ItemGroup>
 </Project>
