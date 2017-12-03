@@ -13,27 +13,42 @@
       <UniqueIdentifier>{D011BB44-1BF7-4113-997B-A081035B40D8}</UniqueIdentifier>
       <Extensions>cl</Extensions>
     </Filter>
+    <Filter Include="Source Files\NewFilter1">
+      <UniqueIdentifier>{e4c3389e-bf7d-45b3-8bf7-f41affb17a2f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="utils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GPUOpenCLProjectforWindows.cpp">
+    <ClCompile Include="Main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Boid.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Flock.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PVector.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="set2_host.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\NewFilter1</Filter>
     </ClCompile>
     <ClCompile Include="set2_source1.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\NewFilter1</Filter>
     </ClCompile>
     <ClCompile Include="get_devices.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\NewFilter1</Filter>
     </ClCompile>
     <ClCompile Include="get_platforms.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\NewFilter1</Filter>
     </ClCompile>
-    <ClCompile Include="Main.cpp">
+    <ClCompile Include="GPUOpenCLProjectforWindows.cpp">
+      <Filter>Source Files\NewFilter1</Filter>
+    </ClCompile>
+    <ClCompile Include="Source.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -47,9 +62,21 @@
     <ClInclude Include="Main.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Boid.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Flock.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PVector.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Intel_OpenCL_Build_Rules Include="Template.cl">
+      <Filter>OpenCL Files</Filter>
+    </Intel_OpenCL_Build_Rules>
+    <Intel_OpenCL_Build_Rules Include="gpu.cl">
       <Filter>OpenCL Files</Filter>
     </Intel_OpenCL_Build_Rules>
   </ItemGroup>
