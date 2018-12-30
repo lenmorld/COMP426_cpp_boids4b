@@ -1,3 +1,9 @@
+# COMP 426
+
+## Boids simulation
+
+https://www.red3d.com/cwr/boids/
+
 currently on:
 GPUOpenCLProjectforWindows.cpp
 
